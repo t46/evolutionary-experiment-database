@@ -5,6 +5,7 @@ from evo_exp_db.fitness import FitnessEvaluator
 from evo_exp_db.evolution import EvolutionEngine
 from evo_exp_db.persistence import DatabaseManager
 from evo_exp_db.visualization import Visualizer
+from evo_exp_db.adapters import AutoresearchAdapter, EvaluatorAdapter
 
 __all__ = [
     "Individual",
@@ -14,4 +15,6 @@ __all__ = [
     "EvolutionEngine",
     "DatabaseManager",
     "Visualizer",
+    "AutoresearchAdapter",
+    "EvaluatorAdapter",
 ]

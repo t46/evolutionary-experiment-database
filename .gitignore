@@ -7,6 +7,9 @@ __pycache__/
 # Demo output (regeneratable)
 demo_output/
 
+# Validation output (regeneratable)
+validation_output/
+
 # IDE
 .idea/
 .vscode/

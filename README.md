@@ -170,9 +170,100 @@ The demo generates four plots:
 3. **Genealogy Tree** — Directed graph colored by fitness, edges colored by operation type
 4. **Population Diversity** — Fitness std deviation and parameter uniqueness over time
 
+## Real Data Validation
+
+EED has been validated against two real autoresearch pipeline outputs (see `validate_real_data.py`):
+
+### Data Sources
+
+1. **Vanilla autoresearch hypotheses** (6 hypotheses from an LLM inference optimization project)
+   - Each hypothesis has: statement, rationale, testable_predictions, estimated_novelty, confidence, status
+   - Adapter: `evo_exp_db/adapters/autoresearch_adapter.py`
+
+2. **Auto-research-evaluator experiments** (13 paper evaluations with multi-phase analysis)
+   - Each experiment has: paper metadata, problem analysis, methodology evaluation, strengths/weaknesses, scores
+   - Adapter: `evo_exp_db/adapters/evaluator_adapter.py`
+
+### Running the Validation
+
+```bash
+uv run python validate_real_data.py
+```
+
+Outputs to `validation_output/` with SQLite databases, plots, and a JSON report for each source.
+
+### Key Findings
+
+**Fitness ranking validity**:
+- The fitness function produces differentiated rankings for both data sources
+- Autoresearch: fitness spread of 0.048 across 6 hypotheses (narrow but ordered correctly — higher confidence/novelty hypotheses rank higher)
+- Evaluator: fitness spread of 0.330 across 13 experiments (wider spread; experiments with explicit numeric scores from Phase 3-5 rank above those with only qualitative assessments)
+- The top-ranked evaluator experiment (AI Scientist-v2, exp-2025-11-19-v2) had the richest numeric scoring (novelty 9.2/10, technical quality 8.4/10), which aligns with it being the most thoroughly evaluated
+
+**Crossover behavior**:
+- 67-100% of crossover offspring have fitness between their parents (expected for uniform crossover of parameters)
+- No synergistic combinations observed — this is because crossover selects existing parameter values rather than interpolating
+
+**Mutation behavior**:
+- Gaussian mutation modifies `genome.parameters` but does not change `genome.results`, so fitness delta is zero
+- This is architecturally correct: the synthetic demo solves this by re-simulating results after mutation; real data cannot be re-simulated without actually running new experiments
+
+**Evolution dynamics**:
+- Autoresearch: 4.5% improvement over 5 generations (converges quickly due to narrow fitness spread)
+- Evaluator: 1.4% improvement over 5 generations (population converges toward the dominant top-scored individual)
+- Both populations collapse to near-zero diversity by generation 3-4 due to small population size and elitism
+
+### Limitations Identified
+
+| Limitation | Impact | Mitigation Path |
+|-----------|--------|----------------|
+| **Semantic gap in crossover** | Crossing numeric scores (novelty=0.8 x novelty=0.75) does not combine research ideas | LLM-based crossover that recombines hypothesis text, not just scores |
+| **Numeric-only mutation** | Perturbing confidence from 0.7 to 0.72 does not generate new hypotheses | LLM-based mutation that creates hypothesis variants from text |
+| **No re-evaluation after genetic operations** | Results are stale after crossover/mutation | Re-run experiment or re-evaluate paper with new configuration |
+| **Small population** | 6-13 individuals below viable minimum for meaningful selection pressure | Accumulate more experiments over time; bootstrap with LLM-generated variants |
+| **Heterogeneous evaluator scoring** | Many experiments fall to default 0.5 when reports lack numeric scores | Standardize evaluation report format; implement NLP score extraction |
+
+### Architecture Insight
+
+The validation reveals a fundamental architectural tension: **EED's evolutionary operators work on numeric feature vectors, but research experiments are fundamentally structured objects (hypotheses, methods, results) where meaning lives in the text, not the numbers.** The current system is a valid prototype for:
+
+- Tracking and ranking experiment quality over time
+- Maintaining genealogy/provenance of experiment configurations
+- Identifying which fitness components drive selection
+
+For genuine "evolution of research ideas," the genetic operators need to work at the semantic level — requiring LLM integration for crossover (combine two hypotheses into a new one) and mutation (generate a variant of a hypothesis).
+
+## Adapters
+
+### AutoresearchAdapter
+
+Converts autoresearch project JSON (hypotheses array) into EED Individuals.
+
+```python
+from evo_exp_db.adapters import AutoresearchAdapter
+
+adapter = AutoresearchAdapter("path/to/efficient_llm_inference.json")
+population = adapter.to_population()
+print(adapter.summary())
+```
+
+### EvaluatorAdapter
+
+Converts auto-research-evaluator experiment directories into EED Individuals.
+
+```python
+from evo_exp_db.adapters import EvaluatorAdapter
+
+adapter = EvaluatorAdapter("path/to/auto-research-evaluator/")
+population = adapter.to_population()
+print(adapter.summary())
+```
+
 ## Future Directions
 
+- **LLM-based genetic operators**: Crossover and mutation that operate on experiment semantics, not just numeric features
 - **Integration with autoresearch**: Drop-in replacement for TSV logging in real autonomous research loops
+- **Re-evaluation pipeline**: After genetic operations, automatically re-run or re-evaluate experiments
 - **Multi-objective fitness**: Pareto-front based selection instead of weighted sum
 - **Speciation**: Allow sub-populations to evolve independently, preventing premature convergence
 - **Adaptive mutation**: Automatically adjust mutation rate based on population diversity
@@ -180,6 +271,7 @@ The demo generates four plots:
 - **Semantic similarity**: Use embeddings to measure experiment novelty/distance
 - **Gaming resistance**: Adversarial evaluation to prevent fitness function exploitation
 - **Web UI**: Interactive genealogy explorer and real-time evolution dashboard
+- **Standardized adapter interface**: Common protocol for any experiment pipeline to feed EED
 
 ## License
 
