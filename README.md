@@ -259,6 +259,69 @@ population = adapter.to_population()
 print(adapter.summary())
 ```
 
+### KarpathyAdapter
+
+Converts Karpathy-style autoresearch `results.tsv` (TSV with commit, val_accuracy, memory_gb, status, description) into EED Individuals. Parses hyperparameter changes from experiment descriptions and uses the actual validation accuracy as the primary fitness signal.
+
+```python
+from evo_exp_db.adapters import KarpathyAdapter
+
+adapter = KarpathyAdapter("path/to/autoresearch-lite/results.tsv")
+population = adapter.to_population()
+print(adapter.summary())
+
+# Access status-grouped experiments
+keeps = adapter.get_keep_experiments()
+groups = adapter.get_status_groups()
+```
+
+## Karpathy Adapter Validation (autoresearch-lite)
+
+Validated against 21 real CIFAR-10 CNN experiments from autoresearch-lite (baseline + 20 LLM-generated experiments: 3 keep, 16 discard, 2 crash).
+
+### Running the Validation
+
+```bash
+uv run python validate_karpathy.py
+```
+
+Outputs to `validation_output/karpathy/` with SQLite database, plots, and a JSON report.
+
+### Key Findings
+
+**Fitness ranking aligns with human-assigned status**:
+- keep mean fitness: 0.6243 (n=3)
+- discard mean fitness: 0.5659 (n=16)
+- crash mean fitness: 0.0975 (n=2)
+- Ordering keep > discard > crash is **valid**
+
+**Crossover operates on hyperparameters, not scores**:
+- Unlike the hypothesis/evaluator adapters where crossover mixed *output* scores (a semantic gap), the Karpathy adapter crosses *input* hyperparameters (LR, weight_decay, epochs, batch_size, etc.)
+- This is a standard and valid hyperparameter search strategy: combining good LR from one experiment with good epoch count from another is exactly what a human researcher would try next
+- Example: crossing the best configuration (doubled filters, val_acc=0.7309) with the second-best (weight_decay=5e-5, val_acc=0.7399) produces a hybrid that inherits weight_decay=5e-5 from one parent and larger filters from the other
+
+**Mutation is standard neuroevolution**:
+- Gaussian mutation with strength=0.1 produces ~10% perturbations on hyperparameters
+- LR=0.01 mutates to 0.009-0.011, batch_size=128 mutates to ~118-150
+- Limitation: integer parameters (batch_size, epochs) are treated as continuous; a production system should round after mutation
+
+**Evolution dynamics**:
+- Population converges from fitness 0.6879 to 0.7525 (+9.4%) over 10 generations
+- Best configuration combines weight_decay=5e-5 (from the actual best experiment) with doubled filters
+- Population diversity collapses to zero by generation 7 (common with small populations and elitism)
+
+### Architecture Insight: Semantic Grounding
+
+The Karpathy adapter resolves the fundamental limitation identified in the previous validation: **when the genome encodes actual experiment inputs (hyperparameters) rather than outputs (scores), evolutionary operations become semantically meaningful.**
+
+| Adapter | Genome Encodes | Crossover Meaning | Mutation Meaning |
+|---------|---------------|-------------------|------------------|
+| Autoresearch | Hypothesis quality scores (outputs) | Mixes scores — no new hypothesis | Perturbs scores — meaningless |
+| Evaluator | Paper evaluation scores (outputs) | Mixes ratings — no new evaluation | Perturbs ratings — meaningless |
+| **Karpathy** | **Hyperparameters (inputs)** | **Combines configurations — valid HP search** | **Explores neighbors — standard neuroevolution** |
+
+This validates the core EED thesis: evolutionary management of experiment results is semantically grounded when operating on experiment *configurations* rather than experiment *evaluations*.
+
 ## Future Directions
 
 - **LLM-based genetic operators**: Crossover and mutation that operate on experiment semantics, not just numeric features
