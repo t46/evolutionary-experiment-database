@@ -11,6 +11,7 @@ authors = [
 dependencies = [
     "matplotlib>=3.10.8",
     "networkx>=3.6.1",
+    "streamlit>=1.56.0",
 ]
 
 [project.urls]

@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import overload
 
 import matplotlib
 matplotlib.use("Agg")  # non-interactive backend for server / CI
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
+import matplotlib.figure
 import networkx as nx
 
 from evo_exp_db.models import Population, Genealogy, Individual
@@ -28,8 +30,13 @@ class Visualizer:
         self,
         populations: list[Population],
         filename: str = "fitness_progression.png",
-    ) -> Path:
-        """Line plot: best / mean / worst fitness per generation."""
+        *,
+        save: bool = True,
+    ) -> Path | matplotlib.figure.Figure:
+        """Line plot: best / mean / worst fitness per generation.
+
+        If save=False, returns the Figure without saving or closing it.
+        """
         gens = [p.generation for p in populations]
         best = [p.best.fitness if p.best else 0 for p in populations]
         mean = [p.mean_fitness for p in populations]
@@ -49,6 +56,9 @@ class Visualizer:
         ax.legend()
         ax.grid(True, alpha=0.3)
 
+        if not save:
+            return fig
+
         path = self.output_dir / filename
         fig.savefig(path, dpi=150, bbox_inches="tight")
         plt.close(fig)
@@ -62,9 +72,17 @@ class Visualizer:
         self,
         populations: list[Population],
         filename: str = "fitness_components.png",
-    ) -> Path:
-        """Stacked area chart of mean fitness component values per generation."""
+        *,
+        save: bool = True,
+    ) -> Path | matplotlib.figure.Figure | None:
+        """Stacked area chart of mean fitness component values per generation.
+
+        If save=False, returns the Figure without saving or closing it.
+        Returns None if there is no data to plot and save=False.
+        """
         if not populations or not populations[0].individuals:
+            if not save:
+                return None
             return self.output_dir / filename
 
         # Collect component names from first individual that has them
@@ -78,6 +96,8 @@ class Visualizer:
                 break
 
         if not comp_names:
+            if not save:
+                return None
             return self.output_dir / filename
 
         gens = [p.generation for p in populations]
@@ -106,6 +126,9 @@ class Visualizer:
         ax.legend(loc="upper left")
         ax.grid(True, alpha=0.3, axis="y")
 
+        if not save:
+            return fig
+
         path = self.output_dir / filename
         fig.savefig(path, dpi=150, bbox_inches="tight")
         plt.close(fig)
@@ -121,8 +144,13 @@ class Visualizer:
         populations: list[Population],
         filename: str = "genealogy_tree.png",
         max_display: int = 100,
-    ) -> Path:
-        """Visualize the genealogy as a directed graph with generation layers."""
+        *,
+        save: bool = True,
+    ) -> Path | matplotlib.figure.Figure:
+        """Visualize the genealogy as a directed graph with generation layers.
+
+        If save=False, returns the Figure without saving or closing it.
+        """
         G = nx.DiGraph()
 
         # Build id -> (generation, fitness) lookup
@@ -158,6 +186,8 @@ class Visualizer:
         if not G.nodes():
             fig, ax = plt.subplots(figsize=(8, 4))
             ax.text(0.5, 0.5, "No genealogy data", ha="center", va="center")
+            if not save:
+                return fig
             path = self.output_dir / filename
             fig.savefig(path, dpi=150, bbox_inches="tight")
             plt.close(fig)
@@ -207,6 +237,9 @@ class Visualizer:
         ax.legend(handles=legend_patches, loc="upper right", title="Operations")
         ax.set_title("Experiment Genealogy Tree\n(color = fitness: red=low, green=high)")
 
+        if not save:
+            return fig
+
         path = self.output_dir / filename
         fig.savefig(path, dpi=150, bbox_inches="tight")
         plt.close(fig)
@@ -220,8 +253,13 @@ class Visualizer:
         self,
         populations: list[Population],
         filename: str = "population_diversity.png",
-    ) -> Path:
-        """Plot fitness standard deviation and unique parameter coverage."""
+        *,
+        save: bool = True,
+    ) -> Path | matplotlib.figure.Figure:
+        """Plot fitness standard deviation and unique parameter coverage.
+
+        If save=False, returns the Figure without saving or closing it.
+        """
         gens = [p.generation for p in populations]
         stds = [p.fitness_std for p in populations]
 
@@ -253,6 +291,9 @@ class Visualizer:
 
         fig.suptitle("Population Diversity Over Generations", fontsize=14)
         fig.tight_layout()
+
+        if not save:
+            return fig
 
         path = self.output_dir / filename
         fig.savefig(path, dpi=150, bbox_inches="tight")
